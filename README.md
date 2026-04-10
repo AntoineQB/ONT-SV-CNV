@@ -1,14 +1,14 @@
 # ONT-SV-CNV
 
-Snakemake pipelines for **structural variant (SV)** and **copy number variation (CNV)** analysis from Oxford Nanopore long-read sequencing data (hg19).
+Snakemake pipelines for **structural variant (SV)** and **copy number variation (CNV)** analysis from Oxford Nanopore long-read sequencing data.
 
 Developed for multimodal sarcoma diagnostics combining nanopore methylation profiling with genomic structural analysis.
 
 ## Pipeline overview
 
-**SV pipeline** — Delly (long-read mode) → filtering (BND/TRA/INV/DUP) → GENCODE v19 annotation → circos plot
+**SV pipeline** — Delly (long-read mode) → filtering (BND/TRA/INV/DUP) → GENCODE annotation → circos plot
 
-**CNV pipeline** — mosdepth (coverage) → Spectre (CNV calling) → GENCODE v19 annotation → genome-wide & per-chromosome plots
+**CNV pipeline** — mosdepth (coverage) → Spectre (CNV calling) → GENCODE  annotation → genome-wide & per-chromosome plots
 
 ## Repository structure
 
@@ -88,7 +88,7 @@ wget -O data/reference/gencode.v19.annotation.gtf.gz \
 gunzip data/reference/gencode.v19.annotation.gtf.gz
 ```
 
-**hg38 (alternative):**
+**hg38:**
 ```bash
 mkdir -p data/reference
 
@@ -111,8 +111,8 @@ gunzip data/reference/gencode.v46.annotation.gtf.gz
 Place your BAM file (sorted, indexed) as:
 
 ```
-data/YOUR_SAMPLE/YOUR_SAMPLE.bam
-data/YOUR_SAMPLE/YOUR_SAMPLE.bam.bai
+data/example/example.bam
+data/example/example.bam.bai
 ```
 
 ### 5. Run the pipelines
@@ -122,11 +122,11 @@ conda activate ont_sv_cnv
 
 # SV analysis
 snakemake -s workflow/Analysis_ONT_SV --cores 8 \
-    --config sample="YOUR_SAMPLE"
+    --config sample="example"
 
 # CNV analysis
 snakemake -s workflow/Analysis_ONT_CNV --cores 8 \
-    --config sample="YOUR_SAMPLE"
+    --config sample="example"
 ```
 
 ---
@@ -145,7 +145,7 @@ snakemake -s workflow/Analysis_ONT_CNV --cores 8 \
 ```bash
 # Example with highlighting
 snakemake -s workflow/Analysis_ONT_SV --cores 8 \
-    --config sample="MY_SAMPLE" highlight_chr1="18" highlight_chr2="X" sample_label="Patient_01"
+    --config sample="example" highlight_chr1="18" highlight_chr2="X" sample_label="Patient_01"
 ```
 
 ### CNV pipeline
@@ -155,13 +155,13 @@ snakemake -s workflow/Analysis_ONT_SV --cores 8 \
 | `sample` | **Required.** Sample name (must match folder name in `data/`) | — |
 | `highlight_chr` | Chromosome to highlight on genome-wide plot | `NA` |
 | `bin_size` | Mosdepth coverage bin size (bp) | `1000` |
-| `min_cnv_len` | Minimum CNV length for Spectre (bp) | `200000` |
+| `min_cnv_len` | Minimum CNV length for Spectre (bp) | `100000` |
 | `cancer` | Enable Spectre cancer mode | `false` |
 
 ```bash
 # Example with cancer mode
 snakemake -s workflow/Analysis_ONT_CNV --cores 8 \
-    --config sample="MY_SAMPLE" highlight_chr="12" cancer=true
+    --config sample="example" highlight_chr="12" cancer=true
 ```
 
 ---
@@ -204,9 +204,8 @@ snakemake -s workflow/Analysis_ONT_CNV --cores 8 \
 
 If you use this pipeline, please cite:
 
-- **Delly**: Rausch T, et al. *Bioinformatics.* 2012;28(18):i333–i339.
-- **Spectre**: Smolka M, et al. [github.com/fritzsedlazeck/Spectre](https://github.com/fritzsedlazeck/Spectre)
-- **mosdepth**: Pedersen BS, Quinlan AR. *Bioinformatics.* 2018;34(5):867–868.
+- **Delly**: Rausch T, et al. *Bioinformatics.* 2012;28(18):i333–i339[github.com/dellytools/delly](https://github.com/dellytools/delly).
+- **mosdepth**: Pedersen BS, Quinlan AR. *Bioinformatics.* 2018;34(5):867–868[github.com/brentp/mosdepth](https://github.com/brentp/mosdepth).
 
 ## License
 
