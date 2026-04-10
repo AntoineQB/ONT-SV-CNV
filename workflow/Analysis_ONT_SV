@@ -1,0 +1,131 @@
+# =============================================================================
+#   ONT Structural Variant (SV) Analysis Pipeline
+#   Nanopore long-read SV calling, annotation, and circos visualization
+#
+#   Tools: Delly (long-read mode), bcftools, R (circlize, GenomicRanges)
+#
+#   Usage:
+#     snakemake -s workflow/Snakefile_SV --cores 8 \
+#       --config sample="SAMPLE_NAME"
+#
+#   Optional config parameters:
+#     highlight_chr1 : first chromosome to highlight in circos  (default: NA)
+#     highlight_chr2 : second chromosome to highlight in circos (default: NA)
+#     sample_label   : display label for plots (default: sample name)
+#
+#   Input:
+#     data/{sample}/{sample}.bam
+#
+#   Output:
+#     Output/SV_Results/{sample}/
+#       ├── {sample}_delly.bcf
+#       ├── {sample}_delly.vcf
+#       ├── {sample}_delly_filtered.vcf
+#       ├── {sample}_BND_annotated.csv
+#       └── figures/
+#           ├── {sample}_circos.pdf
+#           └── {sample}_circos.png
+# =============================================================================
+
+import os
+
+# =============================================================================
+#   Configuration
+# =============================================================================
+SAMPLE         = str(config["sample"])
+HIGHLIGHT_CHR1 = str(config.get("highlight_chr1", "NA"))
+HIGHLIGHT_CHR2 = str(config.get("highlight_chr2", "NA"))
+SAMPLE_LABEL   = str(config.get("sample_label", SAMPLE))
+
+REF = "data/reference/hg19.fasta"
+GTF = "data/reference/gencode.v19.annotation.gtf"
+
+# =============================================================================
+#   Paths
+# =============================================================================
+BAM_FILE = os.path.join("data", SAMPLE, f"{SAMPLE}.bam")
+SV_DIR   = os.path.join("Output", "SV_Results", SAMPLE)
+FIG_DIR  = os.path.join(SV_DIR, "figures")
+
+for d in [SV_DIR, FIG_DIR]:
+    os.makedirs(d, exist_ok=True)
+
+# =============================================================================
+#   Target rule
+# =============================================================================
+rule all:
+    input:
+        os.path.join(SV_DIR, f"{SAMPLE}_BND_annotated.csv"),
+        os.path.join(FIG_DIR, f"{SAMPLE}_circos.pdf"),
+        os.path.join(FIG_DIR, f"{SAMPLE}_circos.png"),
+
+# =============================================================================
+#   Step 1 — Structural variant calling with Delly (long-read mode)
+# =============================================================================
+rule delly_lr:
+    input:
+        bam = BAM_FILE,
+        ref = REF,
+    output:
+        bcf = os.path.join(SV_DIR, f"{SAMPLE}_delly.bcf"),
+    shell:
+        """
+        delly lr -y ont \
+            -o {output.bcf} \
+            -g {input.ref} \
+            {input.bam}
+        """
+
+# =============================================================================
+#   Step 2 — Convert BCF to VCF
+# =============================================================================
+rule bcf_to_vcf:
+    input:
+        bcf = os.path.join(SV_DIR, f"{SAMPLE}_delly.bcf"),
+    output:
+        vcf = os.path.join(SV_DIR, f"{SAMPLE}_delly.vcf"),
+    shell:
+        "bcftools view {input.bcf} > {output.vcf}"
+
+# =============================================================================
+#   Step 3 — Filter: retain BND, TRA, INV, and DUP events (exclude indels)
+# =============================================================================
+rule filter_sv:
+    input:
+        vcf = os.path.join(SV_DIR, f"{SAMPLE}_delly.vcf"),
+    output:
+        vcf = os.path.join(SV_DIR, f"{SAMPLE}_delly_filtered.vcf"),
+    shell:
+        """
+        bcftools view \
+            -i 'SVTYPE=="BND" || SVTYPE=="TRA" || SVTYPE=="INV" || SVTYPE=="DUP"' \
+            {input.vcf} > {output.vcf}
+        """
+
+# =============================================================================
+#   Step 4 — Annotate breakpoints with GENCODE v19 gene annotations
+# =============================================================================
+rule annotate_bnd:
+    input:
+        vcf = os.path.join(SV_DIR, f"{SAMPLE}_delly_filtered.vcf"),
+        gtf = GTF,
+    output:
+        csv = os.path.join(SV_DIR, f"{SAMPLE}_BND_annotated.csv"),
+    script:
+        "scripts/annotate_BND.R"
+
+# =============================================================================
+#   Step 5 — Circos plot (publication-ready)
+# =============================================================================
+rule plot_circos:
+    input:
+        csv = os.path.join(SV_DIR, f"{SAMPLE}_BND_annotated.csv"),
+    output:
+        pdf = os.path.join(FIG_DIR, f"{SAMPLE}_circos.pdf"),
+        png = os.path.join(FIG_DIR, f"{SAMPLE}_circos.png"),
+    params:
+        highlight_chr1 = HIGHLIGHT_CHR1,
+        highlight_chr2 = HIGHLIGHT_CHR2,
+        sample_label   = SAMPLE_LABEL,
+    script:
+        "scripts/plot_circos.R"

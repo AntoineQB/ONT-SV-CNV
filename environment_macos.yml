@@ -1,0 +1,48 @@
+name: ont_sv_cnv
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+
+# ---------------------------------------------------------------
+#  macOS environment
+#
+#  On Apple Silicon (M1/M2/M3/M4), create with:
+#    CONDA_SUBDIR=osx-64 conda env create -f environment_macos.yml
+#    conda activate ont_sv_cnv
+#    conda config --env --set subdir osx-64
+#
+#  On Intel Mac, create normally:
+#    conda env create -f environment_macos.yml
+# ---------------------------------------------------------------
+
+dependencies:
+  # --- Workflow manager ---
+  - snakemake-minimal>=7.0
+
+  # --- Command-line tools ---
+  - python=3.10
+  - delly>=1.1
+  - bcftools>=1.17
+  - mosdepth>=0.3
+  - samtools>=1.17
+
+  # --- R and CRAN packages ---
+  - r-base>=4.2
+  - r-ggplot2
+  - r-dplyr
+  - r-scales
+  - r-ggrepel
+  - r-r.utils
+  - r-rcolorbrewer
+  - r-circlize
+
+  # --- Bioconductor packages ---
+  - bioconductor-variantannotation
+  - bioconductor-genomicranges
+  - bioconductor-genomicfeatures
+  - bioconductor-rtracklayer
+
+  # --- Spectre (not on bioconda) ---
+  - pip:
+    - spectre-cnv

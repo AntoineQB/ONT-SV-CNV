@@ -1,0 +1,207 @@
+# =============================================================================
+#   ONT Copy Number Variation (CNV) Analysis Pipeline
+#   Nanopore long-read CNV calling with Spectre, annotation, and visualization
+#
+#   Tools: mosdepth, Spectre, R (ggplot2, GenomicRanges)
+#
+#   Usage:
+#     snakemake -s workflow/Snakefile_CNV --cores 8 \
+#       --config sample="SAMPLE_NAME"
+#
+#   Optional config parameters:
+#     highlight_chr : chromosome to highlight on genome-wide plot (default: NA)
+#     bin_size      : mosdepth bin size in bp                     (default: 1000)
+#     min_cnv_len   : minimum CNV length in bp for Spectre        (default: 100000)
+#     cancer        : enable Spectre cancer mode                  (default: false)
+#
+#   Input:
+#     data/{sample}/{sample}.bam
+#
+#   Output:
+#     Output/CNV_Results/{sample}/
+#       ├── {sample}.regions.bed.gz          (mosdepth coverage)
+#       ├── {sample}.vcf.gz                  (Spectre CNV calls)
+#       ├── {sample}_cnv.bed.gz              (Spectre BED output)
+#       ├── {sample}_CNV_annotated.csv       (annotated CNV table)
+#       └── figures/
+#           ├── {sample}_CNV_genomewide.pdf
+#           ├── {sample}_CNV_genomewide.png
+#           └── {sample}_CNV_{chr}.pdf/png   (per-chromosome plots)
+# =============================================================================
+
+import os
+
+# =============================================================================
+#   Configuration
+# =============================================================================
+SAMPLE        = str(config["sample"])
+HIGHLIGHT_CHR = str(config.get("highlight_chr", "NA"))
+BIN_SIZE      = int(config.get("bin_size", 1000))
+MIN_CNV_LEN   = int(config.get("min_cnv_len", 100000))
+CANCER_MODE   = config.get("cancer", False)
+
+REF       = "data/reference/hg19.fasta"
+GTF       = "data/reference/gencode.v19.annotation.gtf"
+BLACKLIST = "data/reference/hg19_blacklist.bed"
+MDR_FILE  = "data/reference/hg19.mdr"
+
+# =============================================================================
+#   Paths
+# =============================================================================
+BAM_FILE = os.path.join("data", SAMPLE, f"{SAMPLE}.bam")
+CNV_DIR  = os.path.join("Output", "CNV_Results", SAMPLE)
+FIG_DIR  = os.path.join(CNV_DIR, "figures")
+
+for d in [CNV_DIR, FIG_DIR]:
+    os.makedirs(d, exist_ok=True)
+
+# =============================================================================
+#   Build optional Spectre flags
+# =============================================================================
+def spectre_optional_flags():
+    flags = []
+    if os.path.exists(BLACKLIST):
+        flags.append(f"--blacklist {BLACKLIST}")
+    if os.path.exists(MDR_FILE):
+        flags.append(f"--metadata {MDR_FILE}")
+    if CANCER_MODE:
+        flags.append("--cancer")
+        flags.append("--disable-max-coverage")
+    return " ".join(flags)
+
+SPECTRE_FLAGS = spectre_optional_flags()
+
+# =============================================================================
+#   Chromosomes of interest
+# =============================================================================
+CHROMOSOMES = [f"chr{i}" for i in range(1, 23)] + ["chrX"]
+
+# =============================================================================
+#   Target rule
+# =============================================================================
+rule all:
+    input:
+        os.path.join(CNV_DIR, f"{SAMPLE}_CNV_annotated.csv"),
+        os.path.join(FIG_DIR, f"{SAMPLE}_CNV_genomewide.pdf"),
+        os.path.join(FIG_DIR, f"{SAMPLE}_CNV_genomewide.png"),
+        expand(
+            os.path.join(FIG_DIR, f"{SAMPLE}_CNV_{{chr}}.pdf"),
+            chr=CHROMOSOMES,
+        ),
+
+# =============================================================================
+#   Step 0 (optional) — Generate MDR file for hg19 (run once)
+#   Pre-computes N-regions in the reference to speed up Spectre.
+# =============================================================================
+rule generate_mdr:
+    input:
+        ref = REF,
+    output:
+        mdr = MDR_FILE,
+    shell:
+        """
+        spectre RemoveNs \
+            --reference {input.ref} \
+            --output-dir $(dirname {output.mdr}) \
+            --output-file $(basename {output.mdr}) \
+            --save-only
+        """
+
+# =============================================================================
+#   Step 1 — Coverage binning with mosdepth
+#   Recommended settings for Spectre: 1 kb bins, MAPQ >= 20
+# =============================================================================
+rule mosdepth:
+    input:
+        bam = BAM_FILE,
+    output:
+        bed  = os.path.join(CNV_DIR, f"{SAMPLE}.regions.bed.gz"),
+        csi  = os.path.join(CNV_DIR, f"{SAMPLE}.regions.bed.gz.csi"),
+        summ = os.path.join(CNV_DIR, f"{SAMPLE}.mosdepth.summary.txt"),
+    params:
+        prefix   = os.path.join(CNV_DIR, SAMPLE),
+        bin_size = BIN_SIZE,
+    threads: 8
+    shell:
+        """
+        mosdepth \
+            --threads {threads} \
+            --by {params.bin_size} \
+            --mapq 20 \
+            --quantize 0:5:10:50:500: \
+            {params.prefix} {input.bam}
+        """
+
+# =============================================================================
+#   Step 2 — CNV calling with Spectre
+# =============================================================================
+rule spectre_cnv:
+    input:
+        bed = os.path.join(CNV_DIR, f"{SAMPLE}.regions.bed.gz"),
+        ref = REF,
+    output:
+        vcf = os.path.join(CNV_DIR, f"{SAMPLE}.vcf.gz"),
+        bed = os.path.join(CNV_DIR, f"{SAMPLE}_cnv.bed.gz"),
+    params:
+        outdir      = CNV_DIR,
+        sample      = SAMPLE,
+        min_cnv_len = MIN_CNV_LEN,
+        extra_flags = SPECTRE_FLAGS,
+    shell:
+        """
+        spectre CNVCaller \
+            --coverage {input.bed} \
+            --sample-id {params.sample} \
+            --output-dir {params.outdir} \
+            --reference {input.ref} \
+            --only-chr {chrs} \
+            --ploidy 2 \
+            --min-cnv-len {params.min_cnv_len} \
+            {params.extra_flags}
+        """.format(chrs=",".join(CHROMOSOMES + ["chrY"]))
+
+# =============================================================================
+#   Step 3 — Annotate CNVs with GENCODE v19 gene annotations
+# =============================================================================
+rule annotate_cnv:
+    input:
+        vcf = os.path.join(CNV_DIR, f"{SAMPLE}.vcf.gz"),
+        gtf = GTF,
+    output:
+        csv = os.path.join(CNV_DIR, f"{SAMPLE}_CNV_annotated.csv"),
+    params:
+        sample = SAMPLE,
+    script:
+        "scripts/annotate_CNV.R"
+
+# =============================================================================
+#   Step 4 — Genome-wide CNV plot (PDF + PNG)
+# =============================================================================
+rule plot_cnv_genomewide:
+    input:
+        csv = os.path.join(CNV_DIR, f"{SAMPLE}_CNV_annotated.csv"),
+        bed = os.path.join(CNV_DIR, f"{SAMPLE}.regions.bed.gz"),
+    output:
+        pdf = os.path.join(FIG_DIR, f"{SAMPLE}_CNV_genomewide.pdf"),
+        png = os.path.join(FIG_DIR, f"{SAMPLE}_CNV_genomewide.png"),
+    params:
+        sample        = SAMPLE,
+        highlight_chr = HIGHLIGHT_CHR,
+    script:
+        "scripts/plot_CNV.R"
+
+# =============================================================================
+#   Step 5 — Per-chromosome CNV plot with gene annotations
+# =============================================================================
+rule plot_cnv_chromosome:
+    input:
+        csv = os.path.join(CNV_DIR, f"{SAMPLE}_CNV_annotated.csv"),
+        bed = os.path.join(CNV_DIR, f"{SAMPLE}.regions.bed.gz"),
+    output:
+        pdf = os.path.join(FIG_DIR, f"{SAMPLE}_CNV_{{chr}}.pdf"),
+        png = os.path.join(FIG_DIR, f"{SAMPLE}_CNV_{{chr}}.png"),
+    params:
+        sample = SAMPLE,
+        chr    = "{chr}",
+    script:
+        "scripts/plot_CNV_chromosome.R"
