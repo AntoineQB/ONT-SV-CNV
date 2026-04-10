@@ -191,4 +191,4 @@ If you use this pipeline, please cite:
 
 ## License
 
-GPL-3.0
+This project is licensed under the [MIT License](LICENSE).
