@@ -4,7 +4,6 @@
 #   Annotates copy number variants from a Spectre VCF with overlapping genes
 #   from the GENCODE v19 annotation. Prioritizes protein-coding genes.
 #
-#   Inputs/Outputs are controlled by Snakemake.
 # =============================================================================
 
 suppressPackageStartupMessages({
@@ -13,6 +12,10 @@ suppressPackageStartupMessages({
   library(GenomicFeatures)
   library(dplyr)
   library(rtracklayer)
+  # txdbmaker requis depuis GenomicFeatures >= 1.61.1
+  if (requireNamespace("txdbmaker", quietly = TRUE)) {
+    library(txdbmaker)
+  }
 })
 
 # --- 1. Snakemake parameters ---

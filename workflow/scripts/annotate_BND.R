@@ -5,7 +5,6 @@
 #   or nearby genes from the GENCODE v19 GTF annotation.
 #   Compatible with both Delly (CHR2 + POS2) and Sniffles2 (CHR2 + END).
 #
-#   Inputs/Outputs are controlled by Snakemake.
 # =============================================================================
 
 suppressPackageStartupMessages({
@@ -14,6 +13,10 @@ suppressPackageStartupMessages({
   library(GenomicFeatures)
   library(dplyr)
   library(rtracklayer)
+  # txdbmaker requis depuis GenomicFeatures >= 1.61.1
+  if (requireNamespace("txdbmaker", quietly = TRUE)) {
+    library(txdbmaker)
+  }
 })
 
 # --- 1. Retrieve paths from Snakemake ---
@@ -80,7 +83,6 @@ sv_df <- data.frame(
 
 # --- 5. Load GENCODE v19 gene annotations ---
 cat("Loading GENCODE GTF annotation...\n")
-txdb      <- makeTxDbFromGFF(gtf_file)
 gtf       <- rtracklayer::import(gtf_file)
 genes_gtf <- gtf[gtf$type == "gene"]
 
