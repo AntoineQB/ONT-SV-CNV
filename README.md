@@ -1,6 +1,6 @@
 # ONT-SV-CNV
 
-Snakemake pipelines for **structural variant (SV)** and **copy number variation (CNV)** analysis from Oxford Nanopore long-read sequencing data.
+Snakemake pipelines for **structural variant (SV)** and **copy number variation (CNV)** analysis from Oxford Nanopore long-read sequencing data (hg19).
 
 Developed for multimodal sarcoma diagnostics combining nanopore methylation profiling with genomic structural analysis.
 
@@ -45,7 +45,7 @@ ONT-SV-CNV/
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/AntoineQB/ONT-SV-CNV.git
+git clone https://github.com/YOUR_USERNAME/ONT-SV-CNV.git
 cd ONT-SV-CNV
 ```
 
@@ -72,6 +72,7 @@ conda config --env --set subdir osx-64
 
 ### 3. Download reference files
 
+**hg19 (default):**
 ```bash
 mkdir -p data/reference
 
@@ -81,19 +82,37 @@ wget -O data/reference/hg19.fasta.gz \
 gunzip data/reference/hg19.fasta.gz
 samtools faidx data/reference/hg19.fasta
 
-# GENCODE v19 annotation
+# GENCODE v19 annotation (hg19)
 wget -O data/reference/gencode.v19.annotation.gtf.gz \
     https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_19/gencode.v19.annotation.gtf.gz
 gunzip data/reference/gencode.v19.annotation.gtf.gz
 ```
 
+**hg38 (alternative):**
+```bash
+mkdir -p data/reference
+
+# hg38 reference genome (NCBI mirror — faster download)
+wget -O data/reference/hg38.fasta.gz \
+    https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.15_GRCh38/seqs_for_alignment_pipelines.ucsc_ids/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna.gz
+gunzip data/reference/hg38.fasta.gz
+samtools faidx data/reference/hg38.fasta
+
+# GENCODE v46 annotation (hg38)
+wget -O data/reference/gencode.v46.annotation.gtf.gz \
+    https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_46/gencode.v46.annotation.gtf.gz
+gunzip data/reference/gencode.v46.annotation.gtf.gz
+```
+
+> **Note:** If using hg38, update the `REF` and `GTF` paths at the top of the Snakefiles accordingly.
+
 ### 4. Prepare your data
 
-Place your BAM file (aligned to hg19, sorted, indexed) as the example file:
+Place your BAM file (sorted, indexed) as:
 
 ```
-data/example/example.bam
-data/example/example.bam.bai
+data/YOUR_SAMPLE/YOUR_SAMPLE.bam
+data/YOUR_SAMPLE/YOUR_SAMPLE.bam.bai
 ```
 
 ### 5. Run the pipelines
@@ -136,7 +155,7 @@ snakemake -s workflow/Analysis_ONT_SV --cores 8 \
 | `sample` | **Required.** Sample name (must match folder name in `data/`) | — |
 | `highlight_chr` | Chromosome to highlight on genome-wide plot | `NA` |
 | `bin_size` | Mosdepth coverage bin size (bp) | `1000` |
-| `min_cnv_len` | Minimum CNV length for Spectre (bp) | `100000` |
+| `min_cnv_len` | Minimum CNV length for Spectre (bp) | `200000` |
 | `cancer` | Enable Spectre cancer mode | `false` |
 
 ```bash
